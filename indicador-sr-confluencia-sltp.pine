@@ -1,0 +1,723 @@
+//@version=5
+indicator("Zonas Rebote + Volumen XAU", "ZRV", true, max_lines_count=500, max_labels_count=500)
+
+// ============================================================
+// INPUTS
+// ============================================================
+
+pivot_l   = input.int(10,    "Velas izquierda pivot",     minval=2,  maxval=50,  group="Pivotes SR")
+pivot_r   = input.int(10,    "Velas derecha pivot",       minval=2,  maxval=50,  group="Pivotes SR")
+touch_pct = input.float(0.4, "Ancho zona rebote pct",     minval=0.1, step=0.1,  group="Pivotes SR")
+tl_min    = input.int(8,     "Velas minimas tendencia",   minval=3,  maxval=100, group="Pivotes SR")
+score_min = input.int(2,     "Score minimo zona (1-5)",   minval=1,  maxval=5,   group="Pivotes SR")
+
+vp_bars   = input.int(100,   "Velas para Volume Profile", minval=20, maxval=300, group="Volume Profile")
+vp_va_pct = input.float(70,  "Value Area pct",            minval=50, maxval=95,  group="Volume Profile")
+show_vp   = input.bool(true, "Mostrar Volume Profile",                           group="Volume Profile")
+
+show_tbl   = input.bool(true,  "Mostrar tabla",     group="Visual")
+show_lines = input.bool(false, "Lineas SR detalle", group="Visual")
+
+col_up  = input.color(color.new(#00C853, 0),  "Alcista",           group="Colores")
+col_dn  = input.color(color.new(#FF1744, 0),  "Bajista",           group="Colores")
+col_poc = input.color(color.new(#FFD600, 0),  "POC max volumen",   group="Colores")
+col_va  = input.color(color.new(#7B1FA2, 70), "Value Area",        group="Colores")
+col_hvn = input.color(color.new(#FF6F00, 60), "Zona alto volumen", group="Colores")
+col_lvn = input.color(color.new(#37474F, 75), "Zona bajo volumen", group="Colores")
+
+// ============================================================
+// PIVOTES
+// ============================================================
+
+ph = ta.pivothigh(high, pivot_l, pivot_r)
+pl = ta.pivotlow(low,   pivot_l, pivot_r)
+
+ph_val = not na(ph) ? ph : na
+ph_bar = not na(ph) ? bar_index[pivot_r] : na
+pl_val = not na(pl) ? pl : na
+pl_bar = not na(pl) ? bar_index[pivot_r] : na
+
+tzone = close * touch_pct / 100
+
+// ============================================================
+// VARIABLES SR
+// ============================================================
+
+var float r1  = na
+var int   r1t = 0
+var float r2  = na
+var int   r2t = 0
+var float r3  = na
+var int   r3t = 0
+var float r4  = na
+var int   r4t = 0
+var float r5  = na
+var int   r5t = 0
+
+var float s1  = na
+var int   s1t = 0
+var float s2  = na
+var int   s2t = 0
+var float s3  = na
+var int   s3t = 0
+var float s4  = na
+var int   s4t = 0
+var float s5  = na
+var int   s5t = 0
+
+var float tp_ph_prev = na
+var int   tb_ph_prev = na
+var float tp_ph_curr = na
+var int   tb_ph_curr = na
+
+var float tp_pl_prev = na
+var int   tb_pl_prev = na
+var float tp_pl_curr = na
+var int   tb_pl_curr = na
+
+var int trend_dir = 0
+
+// ============================================================
+// ROTAR SR
+// ============================================================
+
+if not na(ph_val)
+    r5  := r4
+    r5t := r4t
+    r4  := r3
+    r4t := r3t
+    r3  := r2
+    r3t := r2t
+    r2  := r1
+    r2t := r1t
+    r1  := ph_val
+    r1t := 1
+
+if not na(pl_val)
+    s5  := s4
+    s5t := s4t
+    s4  := s3
+    s4t := s3t
+    s3  := s2
+    s3t := s2t
+    s2  := s1
+    s2t := s1t
+    s1  := pl_val
+    s1t := 1
+
+// ============================================================
+// CONTAR TOQUES
+// ============================================================
+
+if not na(r1) and math.abs(high - r1) <= tzone
+    r1t += 1
+if not na(r2) and math.abs(high - r2) <= tzone
+    r2t += 1
+if not na(r3) and math.abs(high - r3) <= tzone
+    r3t += 1
+if not na(r4) and math.abs(high - r4) <= tzone
+    r4t += 1
+if not na(r5) and math.abs(high - r5) <= tzone
+    r5t += 1
+
+if not na(s1) and math.abs(low - s1) <= tzone
+    s1t += 1
+if not na(s2) and math.abs(low - s2) <= tzone
+    s2t += 1
+if not na(s3) and math.abs(low - s3) <= tzone
+    s3t += 1
+if not na(s4) and math.abs(low - s4) <= tzone
+    s4t += 1
+if not na(s5) and math.abs(low - s5) <= tzone
+    s5t += 1
+
+// ============================================================
+// TENDENCIAS
+// ============================================================
+
+if not na(ph_val)
+    tp_ph_prev := tp_ph_curr
+    tb_ph_prev := tb_ph_curr
+    tp_ph_curr := ph_val
+    tb_ph_curr := ph_bar
+    if not na(tp_ph_prev) and not na(tp_ph_curr)
+        gap = tb_ph_curr - tb_ph_prev
+        if gap >= tl_min and tp_ph_curr < tp_ph_prev
+            sp = (tp_ph_prev - tp_ph_curr) / tp_ph_prev * 100
+            lw = sp > 1.5 or gap > 40 ? 3 : sp > 0.5 or gap > 20 ? 2 : 1
+            line.new(tb_ph_prev, tp_ph_prev, tb_ph_curr, tp_ph_curr, color=col_dn, width=lw, extend=extend.none)
+            trend_dir := -1
+
+if not na(pl_val)
+    tp_pl_prev := tp_pl_curr
+    tb_pl_prev := tb_pl_curr
+    tp_pl_curr := pl_val
+    tb_pl_curr := pl_bar
+    if not na(tp_pl_prev) and not na(tp_pl_curr)
+        gap = tb_pl_curr - tb_pl_prev
+        if gap >= tl_min and tp_pl_curr > tp_pl_prev
+            sp = (tp_pl_curr - tp_pl_prev) / tp_pl_prev * 100
+            lw = sp > 1.5 or gap > 40 ? 3 : sp > 0.5 or gap > 20 ? 2 : 1
+            line.new(tb_pl_prev, tp_pl_prev, tb_pl_curr, tp_pl_curr, color=col_up, width=lw, extend=extend.none)
+            trend_dir := 1
+
+// ============================================================
+// HELPERS SR
+// ============================================================
+
+score_sr(nivel, toques, es_sup) =>
+    sc = 0
+    if toques >= 1
+        sc := sc + 1
+    if toques >= 2
+        sc := sc + 1
+    if toques >= 4
+        sc := sc + 1
+    if es_sup and trend_dir == 1
+        sc := sc + 1
+    if not es_sup and trend_dir == -1
+        sc := sc + 1
+    prox = math.abs(close - nivel) / close * 100
+    if prox <= touch_pct * 2
+        sc := sc + 1
+    sc
+
+zone_col(sc, es_sup) =>
+    es_sup ? (sc >= 4 ? color.new(#00C853, 58) : sc == 3 ? color.new(#00C853, 70) : color.new(#00C853, 82)) :
+             (sc >= 4 ? color.new(#FF1744, 58) : sc == 3 ? color.new(#FF1744, 70) : color.new(#FF1744, 82))
+
+// ============================================================
+// ZONAS SR — variables persistentes (redibujadas solo en última barra)
+// ============================================================
+
+var box   zr1 = na
+var box   zr2 = na
+var box   zr3 = na
+var box   zr4 = na
+var box   zr5 = na
+var box   zs1 = na
+var box   zs2 = na
+var box   zs3 = na
+var box   zs4 = na
+var box   zs5 = na
+var label lr1 = na
+var label lr2 = na
+var label lr3 = na
+var label lr4 = na
+var label lr5 = na
+var label ls1 = na
+var label ls2 = na
+var label ls3 = na
+var label ls4 = na
+var label ls5 = na
+
+if barstate.islast
+    zone_h = close * touch_pct / 100
+    xR = bar_index + 30
+    xL = bar_index - 10
+
+    box.delete(zr1)
+    box.delete(zr2)
+    box.delete(zr3)
+    box.delete(zr4)
+    box.delete(zr5)
+    box.delete(zs1)
+    box.delete(zs2)
+    box.delete(zs3)
+    box.delete(zs4)
+    box.delete(zs5)
+    label.delete(lr1)
+    label.delete(lr2)
+    label.delete(lr3)
+    label.delete(lr4)
+    label.delete(lr5)
+    label.delete(ls1)
+    label.delete(ls2)
+    label.delete(ls3)
+    label.delete(ls4)
+    label.delete(ls5)
+
+    if not na(r1) and score_sr(r1, r1t, false) >= score_min
+        zr1 := box.new(xL, r1 + zone_h, xR, r1 - zone_h, bgcolor=zone_col(score_sr(r1,r1t,false), false), border_color=color.new(col_dn, 50), border_width=1)
+        lr1 := label.new(xR, r1 + zone_h, text="R1 " + str.tostring(math.round(r1, 2)) + " [" + str.tostring(score_sr(r1,r1t,false)) + "/5]", color=color.new(col_dn, 75), textcolor=col_dn, style=label.style_label_left, size=size.small)
+
+    if not na(r2) and score_sr(r2, r2t, false) >= score_min
+        zr2 := box.new(xL, r2 + zone_h, xR, r2 - zone_h, bgcolor=zone_col(score_sr(r2,r2t,false), false), border_color=color.new(col_dn, 50), border_width=1)
+        lr2 := label.new(xR, r2 + zone_h, text="R2 " + str.tostring(math.round(r2, 2)) + " [" + str.tostring(score_sr(r2,r2t,false)) + "/5]", color=color.new(col_dn, 75), textcolor=col_dn, style=label.style_label_left, size=size.small)
+
+    if not na(r3) and score_sr(r3, r3t, false) >= score_min
+        zr3 := box.new(xL, r3 + zone_h, xR, r3 - zone_h, bgcolor=zone_col(score_sr(r3,r3t,false), false), border_color=color.new(col_dn, 50), border_width=1)
+        lr3 := label.new(xR, r3 + zone_h, text="R3 " + str.tostring(math.round(r3, 2)) + " [" + str.tostring(score_sr(r3,r3t,false)) + "/5]", color=color.new(col_dn, 75), textcolor=col_dn, style=label.style_label_left, size=size.small)
+
+    if not na(r4) and score_sr(r4, r4t, false) >= score_min
+        zr4 := box.new(xL, r4 + zone_h, xR, r4 - zone_h, bgcolor=zone_col(score_sr(r4,r4t,false), false), border_color=color.new(col_dn, 50), border_width=1)
+        lr4 := label.new(xR, r4 + zone_h, text="R4 " + str.tostring(math.round(r4, 2)) + " [" + str.tostring(score_sr(r4,r4t,false)) + "/5]", color=color.new(col_dn, 75), textcolor=col_dn, style=label.style_label_left, size=size.small)
+
+    if not na(r5) and score_sr(r5, r5t, false) >= score_min
+        zr5 := box.new(xL, r5 + zone_h, xR, r5 - zone_h, bgcolor=zone_col(score_sr(r5,r5t,false), false), border_color=color.new(col_dn, 50), border_width=1)
+        lr5 := label.new(xR, r5 + zone_h, text="R5 " + str.tostring(math.round(r5, 2)) + " [" + str.tostring(score_sr(r5,r5t,false)) + "/5]", color=color.new(col_dn, 75), textcolor=col_dn, style=label.style_label_left, size=size.small)
+
+    if not na(s1) and score_sr(s1, s1t, true) >= score_min
+        zs1 := box.new(xL, s1 + zone_h, xR, s1 - zone_h, bgcolor=zone_col(score_sr(s1,s1t,true), true), border_color=color.new(col_up, 50), border_width=1)
+        ls1 := label.new(xR, s1 - zone_h, text="S1 " + str.tostring(math.round(s1, 2)) + " [" + str.tostring(score_sr(s1,s1t,true)) + "/5]", color=color.new(col_up, 75), textcolor=col_up, style=label.style_label_left, size=size.small)
+
+    if not na(s2) and score_sr(s2, s2t, true) >= score_min
+        zs2 := box.new(xL, s2 + zone_h, xR, s2 - zone_h, bgcolor=zone_col(score_sr(s2,s2t,true), true), border_color=color.new(col_up, 50), border_width=1)
+        ls2 := label.new(xR, s2 - zone_h, text="S2 " + str.tostring(math.round(s2, 2)) + " [" + str.tostring(score_sr(s2,s2t,true)) + "/5]", color=color.new(col_up, 75), textcolor=col_up, style=label.style_label_left, size=size.small)
+
+    if not na(s3) and score_sr(s3, s3t, true) >= score_min
+        zs3 := box.new(xL, s3 + zone_h, xR, s3 - zone_h, bgcolor=zone_col(score_sr(s3,s3t,true), true), border_color=color.new(col_up, 50), border_width=1)
+        ls3 := label.new(xR, s3 - zone_h, text="S3 " + str.tostring(math.round(s3, 2)) + " [" + str.tostring(score_sr(s3,s3t,true)) + "/5]", color=color.new(col_up, 75), textcolor=col_up, style=label.style_label_left, size=size.small)
+
+    if not na(s4) and score_sr(s4, s4t, true) >= score_min
+        zs4 := box.new(xL, s4 + zone_h, xR, s4 - zone_h, bgcolor=zone_col(score_sr(s4,s4t,true), true), border_color=color.new(col_up, 50), border_width=1)
+        ls4 := label.new(xR, s4 - zone_h, text="S4 " + str.tostring(math.round(s4, 2)) + " [" + str.tostring(score_sr(s4,s4t,true)) + "/5]", color=color.new(col_up, 75), textcolor=col_up, style=label.style_label_left, size=size.small)
+
+    if not na(s5) and score_sr(s5, s5t, true) >= score_min
+        zs5 := box.new(xL, s5 + zone_h, xR, s5 - zone_h, bgcolor=zone_col(score_sr(s5,s5t,true), true), border_color=color.new(col_up, 50), border_width=1)
+        ls5 := label.new(xR, s5 - zone_h, text="S5 " + str.tostring(math.round(s5, 2)) + " [" + str.tostring(score_sr(s5,s5t,true)) + "/5]", color=color.new(col_up, 75), textcolor=col_up, style=label.style_label_left, size=size.small)
+
+if show_lines and barstate.islast and not na(r1)
+    line.new(bar_index - 50, r1, bar_index + 10, r1, color=color.new(col_dn, 60), width=1, style=line.style_dashed, extend=extend.none)
+
+if show_lines and barstate.islast and not na(s1)
+    line.new(bar_index - 50, s1, bar_index + 10, s1, color=color.new(col_up, 60), width=1, style=line.style_dashed, extend=extend.none)
+
+// ============================================================
+// VOLUME PROFILE — variables acumuladoras
+// ============================================================
+
+var float vp_hi = na
+var float vp_lo = na
+var float vp_rs = na
+
+var float v01 = 0.0
+var float v02 = 0.0
+var float v03 = 0.0
+var float v04 = 0.0
+var float v05 = 0.0
+var float v06 = 0.0
+var float v07 = 0.0
+var float v08 = 0.0
+var float v09 = 0.0
+var float v10 = 0.0
+var float v11 = 0.0
+var float v12 = 0.0
+var float v13 = 0.0
+var float v14 = 0.0
+var float v15 = 0.0
+var float v16 = 0.0
+var float v17 = 0.0
+var float v18 = 0.0
+var float v19 = 0.0
+var float v20 = 0.0
+
+var float poc_price = na
+var float vah_price = na
+var float val_price = na
+var float vol_total = na
+var float vol_max   = na
+
+// ============================================================
+// CALCULAR VOLUME PROFILE EN ULTIMA BARRA
+// ============================================================
+
+if barstate.islast
+    hh = high
+    ll = low
+    for i = 0 to vp_bars - 1
+        hh := math.max(hh, high[i])
+        ll := math.min(ll, low[i])
+    vp_hi := hh
+    vp_lo := ll
+    vp_rs := (hh - ll) / 20
+
+    v01 := 0.0
+    v02 := 0.0
+    v03 := 0.0
+    v04 := 0.0
+    v05 := 0.0
+    v06 := 0.0
+    v07 := 0.0
+    v08 := 0.0
+    v09 := 0.0
+    v10 := 0.0
+    v11 := 0.0
+    v12 := 0.0
+    v13 := 0.0
+    v14 := 0.0
+    v15 := 0.0
+    v16 := 0.0
+    v17 := 0.0
+    v18 := 0.0
+    v19 := 0.0
+    v20 := 0.0
+
+    for i = 0 to vp_bars - 1
+        ch = high[i]
+        cl = low[i]
+        cv = volume[i]
+        cr = ch - cl
+        if cr <= 0
+            cr := syminfo.mintick
+        ov1  = math.min(ch, ll + vp_rs *  1) - math.max(cl, ll + vp_rs *  0)
+        ov2  = math.min(ch, ll + vp_rs *  2) - math.max(cl, ll + vp_rs *  1)
+        ov3  = math.min(ch, ll + vp_rs *  3) - math.max(cl, ll + vp_rs *  2)
+        ov4  = math.min(ch, ll + vp_rs *  4) - math.max(cl, ll + vp_rs *  3)
+        ov5  = math.min(ch, ll + vp_rs *  5) - math.max(cl, ll + vp_rs *  4)
+        ov6  = math.min(ch, ll + vp_rs *  6) - math.max(cl, ll + vp_rs *  5)
+        ov7  = math.min(ch, ll + vp_rs *  7) - math.max(cl, ll + vp_rs *  6)
+        ov8  = math.min(ch, ll + vp_rs *  8) - math.max(cl, ll + vp_rs *  7)
+        ov9  = math.min(ch, ll + vp_rs *  9) - math.max(cl, ll + vp_rs *  8)
+        ov10 = math.min(ch, ll + vp_rs * 10) - math.max(cl, ll + vp_rs *  9)
+        ov11 = math.min(ch, ll + vp_rs * 11) - math.max(cl, ll + vp_rs * 10)
+        ov12 = math.min(ch, ll + vp_rs * 12) - math.max(cl, ll + vp_rs * 11)
+        ov13 = math.min(ch, ll + vp_rs * 13) - math.max(cl, ll + vp_rs * 12)
+        ov14 = math.min(ch, ll + vp_rs * 14) - math.max(cl, ll + vp_rs * 13)
+        ov15 = math.min(ch, ll + vp_rs * 15) - math.max(cl, ll + vp_rs * 14)
+        ov16 = math.min(ch, ll + vp_rs * 16) - math.max(cl, ll + vp_rs * 15)
+        ov17 = math.min(ch, ll + vp_rs * 17) - math.max(cl, ll + vp_rs * 16)
+        ov18 = math.min(ch, ll + vp_rs * 18) - math.max(cl, ll + vp_rs * 17)
+        ov19 = math.min(ch, ll + vp_rs * 19) - math.max(cl, ll + vp_rs * 18)
+        ov20 = math.min(ch, ll + vp_rs * 20) - math.max(cl, ll + vp_rs * 19)
+        v01 := v01 + (ov1  > 0 ? cv * ov1  / cr : 0)
+        v02 := v02 + (ov2  > 0 ? cv * ov2  / cr : 0)
+        v03 := v03 + (ov3  > 0 ? cv * ov3  / cr : 0)
+        v04 := v04 + (ov4  > 0 ? cv * ov4  / cr : 0)
+        v05 := v05 + (ov5  > 0 ? cv * ov5  / cr : 0)
+        v06 := v06 + (ov6  > 0 ? cv * ov6  / cr : 0)
+        v07 := v07 + (ov7  > 0 ? cv * ov7  / cr : 0)
+        v08 := v08 + (ov8  > 0 ? cv * ov8  / cr : 0)
+        v09 := v09 + (ov9  > 0 ? cv * ov9  / cr : 0)
+        v10 := v10 + (ov10 > 0 ? cv * ov10 / cr : 0)
+        v11 := v11 + (ov11 > 0 ? cv * ov11 / cr : 0)
+        v12 := v12 + (ov12 > 0 ? cv * ov12 / cr : 0)
+        v13 := v13 + (ov13 > 0 ? cv * ov13 / cr : 0)
+        v14 := v14 + (ov14 > 0 ? cv * ov14 / cr : 0)
+        v15 := v15 + (ov15 > 0 ? cv * ov15 / cr : 0)
+        v16 := v16 + (ov16 > 0 ? cv * ov16 / cr : 0)
+        v17 := v17 + (ov17 > 0 ? cv * ov17 / cr : 0)
+        v18 := v18 + (ov18 > 0 ? cv * ov18 / cr : 0)
+        v19 := v19 + (ov19 > 0 ? cv * ov19 / cr : 0)
+        v20 := v20 + (ov20 > 0 ? cv * ov20 / cr : 0)
+
+    // ── vol_max en pasos para evitar limite de anidamiento ──
+    mx_a    = math.max(v01, v02)
+    mx_b    = math.max(v03, v04)
+    mx_c    = math.max(v05, v06)
+    mx_d    = math.max(v07, v08)
+    mx_e    = math.max(v09, v10)
+    mx_f    = math.max(v11, v12)
+    mx_g    = math.max(v13, v14)
+    mx_h    = math.max(v15, v16)
+    mx_i    = math.max(v17, v18)
+    mx_j    = math.max(v19, v20)
+    mx_ab   = math.max(mx_a, mx_b)
+    mx_cd   = math.max(mx_c, mx_d)
+    mx_ef   = math.max(mx_e, mx_f)
+    mx_gh   = math.max(mx_g, mx_h)
+    mx_ij   = math.max(mx_i, mx_j)
+    mx_abcd = math.max(mx_ab, mx_cd)
+    mx_efgh = math.max(mx_ef, mx_gh)
+    vol_max := math.max(math.max(mx_abcd, mx_efgh), mx_ij)
+
+    vol_total := v01+v02+v03+v04+v05+v06+v07+v08+v09+v10+v11+v12+v13+v14+v15+v16+v17+v18+v19+v20
+
+    poc_row = v01==vol_max ? 1  : v02==vol_max ? 2  : v03==vol_max ? 3  : v04==vol_max ? 4  :
+              v05==vol_max ? 5  : v06==vol_max ? 6  : v07==vol_max ? 7  : v08==vol_max ? 8  :
+              v09==vol_max ? 9  : v10==vol_max ? 10 : v11==vol_max ? 11 : v12==vol_max ? 12 :
+              v13==vol_max ? 13 : v14==vol_max ? 14 : v15==vol_max ? 15 : v16==vol_max ? 16 :
+              v17==vol_max ? 17 : v18==vol_max ? 18 : v19==vol_max ? 19 : 20
+
+    poc_price := ll + vp_rs * (poc_row - 0.5)
+
+    va_target = vol_total * vp_va_pct / 100
+    va_vol    = vol_max
+    va_lo     = poc_row
+    va_hi     = poc_row
+
+    for _j = 0 to 9
+        nlo = va_lo - 1
+        nhi = va_hi + 1
+        vlo = nlo >= 1  ? (nlo==1?v01:nlo==2?v02:nlo==3?v03:nlo==4?v04:nlo==5?v05:nlo==6?v06:nlo==7?v07:nlo==8?v08:nlo==9?v09:nlo==10?v10:nlo==11?v11:nlo==12?v12:nlo==13?v13:nlo==14?v14:nlo==15?v15:nlo==16?v16:nlo==17?v17:nlo==18?v18:nlo==19?v19:v20) : 0.0
+        vhi = nhi <= 20 ? (nhi==1?v01:nhi==2?v02:nhi==3?v03:nhi==4?v04:nhi==5?v05:nhi==6?v06:nhi==7?v07:nhi==8?v08:nhi==9?v09:nhi==10?v10:nhi==11?v11:nhi==12?v12:nhi==13?v13:nhi==14?v14:nhi==15?v15:nhi==16?v16:nhi==17?v17:nhi==18?v18:nhi==19?v19:v20) : 0.0
+        if va_vol >= va_target
+            break
+        if vhi >= vlo and nhi <= 20
+            va_vol := va_vol + vhi
+            va_hi  := nhi
+        else if nlo >= 1
+            va_vol := va_vol + vlo
+            va_lo  := nlo
+
+    vah_price := ll + vp_rs * va_hi
+    val_price := ll + vp_rs * (va_lo - 1)
+
+// ============================================================
+// HELPERS VOLUME PROFILE (scope global)
+// ============================================================
+
+mk_col(vr, r_lo, r_hi) =>
+    is_poc = math.abs((r_lo + r_hi) / 2 - poc_price) < vp_rs * 0.6
+    is_hvn = vr >= vol_max * 0.70
+    is_lvn = vr <= vol_max * 0.25
+    is_poc ? col_poc : is_hvn ? col_hvn : is_lvn ? col_lvn : color.new(#607D8B, 65)
+
+mk_w(vr) =>
+    vol_max > 0 ? math.max(1, math.round(15 * vr / vol_max)) : 1
+
+// ============================================================
+// DIBUJAR VOLUME PROFILE
+// ============================================================
+
+var line  poc_ln = na
+var box   va_bx  = na
+var label poc_lb = na
+var label vah_lb = na
+var label val_lb = na
+var box   bv01 = na
+var box   bv02 = na
+var box   bv03 = na
+var box   bv04 = na
+var box   bv05 = na
+var box   bv06 = na
+var box   bv07 = na
+var box   bv08 = na
+var box   bv09 = na
+var box   bv10 = na
+var box   bv11 = na
+var box   bv12 = na
+var box   bv13 = na
+var box   bv14 = na
+var box   bv15 = na
+var box   bv16 = na
+var box   bv17 = na
+var box   bv18 = na
+var box   bv19 = na
+var box   bv20 = na
+
+if barstate.islast and show_vp and not na(poc_price)
+    line.delete(poc_ln)
+    box.delete(va_bx)
+    label.delete(poc_lb)
+    label.delete(vah_lb)
+    label.delete(val_lb)
+    box.delete(bv01)
+    box.delete(bv02)
+    box.delete(bv03)
+    box.delete(bv04)
+    box.delete(bv05)
+    box.delete(bv06)
+    box.delete(bv07)
+    box.delete(bv08)
+    box.delete(bv09)
+    box.delete(bv10)
+    box.delete(bv11)
+    box.delete(bv12)
+    box.delete(bv13)
+    box.delete(bv14)
+    box.delete(bv15)
+    box.delete(bv16)
+    box.delete(bv17)
+    box.delete(bv18)
+    box.delete(bv19)
+    box.delete(bv20)
+
+    bar_w   = 15
+    xr      = bar_index
+    ll      = vp_lo
+    rs      = vp_rs
+
+    bv01 := box.new(xr-mk_w(v01), ll+rs* 1, xr, ll+rs* 0, bgcolor=mk_col(v01,ll+rs* 0,ll+rs* 1), border_color=color.new(mk_col(v01,ll+rs* 0,ll+rs* 1),20), border_width=1)
+    bv02 := box.new(xr-mk_w(v02), ll+rs* 2, xr, ll+rs* 1, bgcolor=mk_col(v02,ll+rs* 1,ll+rs* 2), border_color=color.new(mk_col(v02,ll+rs* 1,ll+rs* 2),20), border_width=1)
+    bv03 := box.new(xr-mk_w(v03), ll+rs* 3, xr, ll+rs* 2, bgcolor=mk_col(v03,ll+rs* 2,ll+rs* 3), border_color=color.new(mk_col(v03,ll+rs* 2,ll+rs* 3),20), border_width=1)
+    bv04 := box.new(xr-mk_w(v04), ll+rs* 4, xr, ll+rs* 3, bgcolor=mk_col(v04,ll+rs* 3,ll+rs* 4), border_color=color.new(mk_col(v04,ll+rs* 3,ll+rs* 4),20), border_width=1)
+    bv05 := box.new(xr-mk_w(v05), ll+rs* 5, xr, ll+rs* 4, bgcolor=mk_col(v05,ll+rs* 4,ll+rs* 5), border_color=color.new(mk_col(v05,ll+rs* 4,ll+rs* 5),20), border_width=1)
+    bv06 := box.new(xr-mk_w(v06), ll+rs* 6, xr, ll+rs* 5, bgcolor=mk_col(v06,ll+rs* 5,ll+rs* 6), border_color=color.new(mk_col(v06,ll+rs* 5,ll+rs* 6),20), border_width=1)
+    bv07 := box.new(xr-mk_w(v07), ll+rs* 7, xr, ll+rs* 6, bgcolor=mk_col(v07,ll+rs* 6,ll+rs* 7), border_color=color.new(mk_col(v07,ll+rs* 6,ll+rs* 7),20), border_width=1)
+    bv08 := box.new(xr-mk_w(v08), ll+rs* 8, xr, ll+rs* 7, bgcolor=mk_col(v08,ll+rs* 7,ll+rs* 8), border_color=color.new(mk_col(v08,ll+rs* 7,ll+rs* 8),20), border_width=1)
+    bv09 := box.new(xr-mk_w(v09), ll+rs* 9, xr, ll+rs* 8, bgcolor=mk_col(v09,ll+rs* 8,ll+rs* 9), border_color=color.new(mk_col(v09,ll+rs* 8,ll+rs* 9),20), border_width=1)
+    bv10 := box.new(xr-mk_w(v10), ll+rs*10, xr, ll+rs* 9, bgcolor=mk_col(v10,ll+rs* 9,ll+rs*10), border_color=color.new(mk_col(v10,ll+rs* 9,ll+rs*10),20), border_width=1)
+    bv11 := box.new(xr-mk_w(v11), ll+rs*11, xr, ll+rs*10, bgcolor=mk_col(v11,ll+rs*10,ll+rs*11), border_color=color.new(mk_col(v11,ll+rs*10,ll+rs*11),20), border_width=1)
+    bv12 := box.new(xr-mk_w(v12), ll+rs*12, xr, ll+rs*11, bgcolor=mk_col(v12,ll+rs*11,ll+rs*12), border_color=color.new(mk_col(v12,ll+rs*11,ll+rs*12),20), border_width=1)
+    bv13 := box.new(xr-mk_w(v13), ll+rs*13, xr, ll+rs*12, bgcolor=mk_col(v13,ll+rs*12,ll+rs*13), border_color=color.new(mk_col(v13,ll+rs*12,ll+rs*13),20), border_width=1)
+    bv14 := box.new(xr-mk_w(v14), ll+rs*14, xr, ll+rs*13, bgcolor=mk_col(v14,ll+rs*13,ll+rs*14), border_color=color.new(mk_col(v14,ll+rs*13,ll+rs*14),20), border_width=1)
+    bv15 := box.new(xr-mk_w(v15), ll+rs*15, xr, ll+rs*14, bgcolor=mk_col(v15,ll+rs*14,ll+rs*15), border_color=color.new(mk_col(v15,ll+rs*14,ll+rs*15),20), border_width=1)
+    bv16 := box.new(xr-mk_w(v16), ll+rs*16, xr, ll+rs*15, bgcolor=mk_col(v16,ll+rs*15,ll+rs*16), border_color=color.new(mk_col(v16,ll+rs*15,ll+rs*16),20), border_width=1)
+    bv17 := box.new(xr-mk_w(v17), ll+rs*17, xr, ll+rs*16, bgcolor=mk_col(v17,ll+rs*16,ll+rs*17), border_color=color.new(mk_col(v17,ll+rs*16,ll+rs*17),20), border_width=1)
+    bv18 := box.new(xr-mk_w(v18), ll+rs*18, xr, ll+rs*17, bgcolor=mk_col(v18,ll+rs*17,ll+rs*18), border_color=color.new(mk_col(v18,ll+rs*17,ll+rs*18),20), border_width=1)
+    bv19 := box.new(xr-mk_w(v19), ll+rs*19, xr, ll+rs*18, bgcolor=mk_col(v19,ll+rs*18,ll+rs*19), border_color=color.new(mk_col(v19,ll+rs*18,ll+rs*19),20), border_width=1)
+    bv20 := box.new(xr-mk_w(v20), ll+rs*20, xr, ll+rs*19, bgcolor=mk_col(v20,ll+rs*19,ll+rs*20), border_color=color.new(mk_col(v20,ll+rs*19,ll+rs*20),20), border_width=1)
+
+    xL     = bar_index - vp_bars
+    poc_ln := line.new(xL, poc_price, xr, poc_price, color=col_poc, width=2, style=line.style_solid, extend=extend.right)
+    poc_lb := label.new(xr, poc_price, text="POC " + str.tostring(math.round(poc_price, 2)), color=color.new(col_poc, 75), textcolor=col_poc, style=label.style_label_left, size=size.small)
+    va_bx  := box.new(xL, vah_price, xr, val_price, bgcolor=col_va, border_color=color.new(#7B1FA2, 30), border_width=1, extend=extend.right)
+    vah_lb := label.new(xr, vah_price, text="VAH " + str.tostring(math.round(vah_price, 2)), color=color.new(#7B1FA2, 80), textcolor=color.new(#CE93D8, 0), style=label.style_label_left, size=size.small)
+    val_lb := label.new(xr, val_price,  text="VAL " + str.tostring(math.round(val_price,  2)), color=color.new(#7B1FA2, 80), textcolor=color.new(#CE93D8, 0), style=label.style_label_left, size=size.small)
+
+// ============================================================
+// TABLA
+// ============================================================
+
+var table tbl = table.new(position.top_right, 3, 10, bgcolor=color.new(#0D1117, 70), border_width=1, border_color=color.new(color.gray, 65), frame_width=1, frame_color=color.new(color.gray, 60))
+
+if show_tbl and barstate.islast
+    hbg = color.new(#161B22, 45)
+    rbg = color.new(#0D1117, 55)
+    htx = color.white
+
+    table.cell(tbl, 0, 0, "NIVEL",  text_color=htx, bgcolor=hbg, text_size=size.small)
+    table.cell(tbl, 1, 0, "PRECIO", text_color=htx, bgcolor=hbg, text_size=size.small)
+    table.cell(tbl, 2, 0, "ACCION", text_color=htx, bgcolor=hbg, text_size=size.small)
+
+    table.cell(tbl, 0, 1, "VOLUMEN", text_color=htx, bgcolor=color.new(#4A148C, 65), text_size=size.small)
+    table.cell(tbl, 1, 1, "",        text_color=htx, bgcolor=color.new(#4A148C, 65), text_size=size.small)
+    table.cell(tbl, 2, 1, "",        text_color=htx, bgcolor=color.new(#4A148C, 65), text_size=size.small)
+
+    pt = not na(poc_price) ? str.tostring(math.round(poc_price, 2)) : "---"
+    ht = not na(vah_price) ? str.tostring(math.round(vah_price, 2)) : "---"
+    lt = not na(val_price) ? str.tostring(math.round(val_price,  2)) : "---"
+
+    table.cell(tbl, 0, 2, "POC",          text_color=col_poc,               bgcolor=rbg, text_size=size.small)
+    table.cell(tbl, 1, 2, pt,             text_color=col_poc,               bgcolor=rbg, text_size=size.small)
+    table.cell(tbl, 2, 2, "Institucional",text_color=col_poc,               bgcolor=rbg, text_size=size.small)
+    table.cell(tbl, 0, 3, "VAH",          text_color=color.new(#CE93D8, 0), bgcolor=rbg, text_size=size.small)
+    table.cell(tbl, 1, 3, ht,             text_color=color.new(#CE93D8, 0), bgcolor=rbg, text_size=size.small)
+    table.cell(tbl, 2, 3, "Vender",       text_color=color.new(#CE93D8, 0), bgcolor=rbg, text_size=size.small)
+    table.cell(tbl, 0, 4, "VAL",          text_color=color.new(#CE93D8, 0), bgcolor=rbg, text_size=size.small)
+    table.cell(tbl, 1, 4, lt,             text_color=color.new(#CE93D8, 0), bgcolor=rbg, text_size=size.small)
+    table.cell(tbl, 2, 4, "Comprar",      text_color=color.new(#CE93D8, 0), bgcolor=rbg, text_size=size.small)
+
+    table.cell(tbl, 0, 5, "SR ACTIVO", text_color=htx, bgcolor=color.new(#1A237E, 65), text_size=size.small)
+    table.cell(tbl, 1, 5, "",           text_color=htx, bgcolor=color.new(#1A237E, 65), text_size=size.small)
+    table.cell(tbl, 2, 5, "",           text_color=htx, bgcolor=color.new(#1A237E, 65), text_size=size.small)
+
+    table.cell(tbl, 0, 6, not na(r1) ? "R1 " + str.tostring(math.round(r1, 2)) : "R1 ---", text_color=color.new(#FF5252, 0), bgcolor=rbg, text_size=size.small)
+    table.cell(tbl, 1, 6, not na(r1) ? str.tostring(r1t) + " toques" : "-",                  text_color=color.new(#FF5252, 0), bgcolor=rbg, text_size=size.small)
+    table.cell(tbl, 2, 6, not na(r1) ? str.tostring(score_sr(r1,r1t,false)) + "/5" : "-",    text_color=color.new(#FF5252, 0), bgcolor=rbg, text_size=size.small)
+
+    table.cell(tbl, 0, 7, not na(s1) ? "S1 " + str.tostring(math.round(s1, 2)) : "S1 ---", text_color=color.new(#69F0AE, 0), bgcolor=rbg, text_size=size.small)
+    table.cell(tbl, 1, 7, not na(s1) ? str.tostring(s1t) + " toques" : "-",                  text_color=color.new(#69F0AE, 0), bgcolor=rbg, text_size=size.small)
+    table.cell(tbl, 2, 7, not na(s1) ? str.tostring(score_sr(s1,s1t,true))  + "/5" : "-",    text_color=color.new(#69F0AE, 0), bgcolor=rbg, text_size=size.small)
+
+    tdir = trend_dir == 1 ? "ALCISTA" : trend_dir == -1 ? "BAJISTA" : "LATERAL"
+    tcol = trend_dir == 1 ? col_up : trend_dir == -1 ? col_dn : color.gray
+
+    above_vah = not na(vah_price) and close > vah_price
+    below_val = not na(val_price)  and close < val_price
+    near_poc  = not na(poc_price)  and math.abs(close - poc_price) / close * 100 < 0.5
+    inside_va = not na(vah_price) and not na(val_price) and close <= vah_price and close >= val_price
+
+    bias_txt = above_vah ? "VENDER en VAH o R" : below_val ? "COMPRAR en VAL o S" : near_poc ? "ESPERAR - zona POC" : inside_va ? "RANGO - esperar extremo" : tdir
+    bias_col = above_vah ? col_dn : below_val ? col_up : near_poc ? color.new(#FFD600, 0) : tcol
+
+    table.cell(tbl, 0, 8, "Tendencia", text_color=htx,      bgcolor=hbg, text_size=size.small)
+    table.cell(tbl, 1, 8, tdir,        text_color=tcol,     bgcolor=hbg, text_size=size.small)
+    table.cell(tbl, 2, 8, "",          text_color=htx,      bgcolor=hbg, text_size=size.small)
+    table.cell(tbl, 0, 9, "SESGO",     text_color=htx,      bgcolor=color.new(#263238, 50), text_size=size.small)
+    table.cell(tbl, 1, 9, bias_txt,    text_color=bias_col, bgcolor=color.new(#263238, 50), text_size=size.normal)
+    table.cell(tbl, 2, 9, "",          text_color=htx,      bgcolor=color.new(#263238, 50), text_size=size.small)
+
+// ============================================================
+// SEÑALES DE ENTRADA PROFESIONALES (COMPRA / VENTA)
+// Lógica: confluencia de nivel clave + patrón de vela + volumen
+// ============================================================
+
+// --- Anatomía de la vela actual y anterior ---
+body       = math.abs(close - open)
+candle_r   = high - low
+upper_w    = high - math.max(close, open)
+lower_w    = math.min(close, open) - low
+body_prev  = math.abs(close[1] - open[1])
+
+// --- Patrones de vela (los que usan los mejores traders) ---
+// Bullish engulfing: vela alcista engulle la bajista anterior
+bull_eng  = close > open and open < close[1] and close > open[1] and close[1] < open[1] and body > body_prev * 0.8
+
+// Bearish engulfing: vela bajista engulle la alcista anterior
+bear_eng  = close < open and open > close[1] and close < open[1] and close[1] > open[1] and body > body_prev * 0.8
+
+// Hammer / Pin bar alcista: mecha inferior larga, cuerpo pequeño arriba
+hammer    = lower_w >= body * 2.0 and upper_w <= body * 0.6 and body > 0 and candle_r > 0
+pin_bull  = lower_w >= candle_r * 0.60 and close > (high + low) / 2
+
+// Shooting star / Pin bar bajista: mecha superior larga, cuerpo pequeño abajo
+shoot_str = upper_w >= body * 2.0 and lower_w <= body * 0.6 and body > 0 and candle_r > 0
+pin_bear  = upper_w >= candle_r * 0.60 and close < (high + low) / 2
+
+// Vela de impulso fuerte (momentum candle)
+bull_mom  = close > open and body >= candle_r * 0.60
+bear_mom  = close < open and body >= candle_r * 0.60
+
+// Patrón alcista válido = cualquiera de los anteriores
+bull_pat  = bull_eng or hammer or pin_bull or bull_mom
+bear_pat  = bear_eng or shoot_str or pin_bear or bear_mom
+
+// --- Confirmación de volumen (mínimo 10% sobre la media de 20 velas) ---
+vol_ma20  = ta.sma(volume, 20)
+vol_conf  = volume >= vol_ma20 * 1.10
+
+// --- Zona de tolerancia para proximidad a niveles ---
+prox_z    = close * touch_pct / 100 * 2.5
+
+// --- Proximidad a soportes (precio toca o entra en zona) ---
+at_s1 = not na(s1) and low <= s1 + prox_z and low >= s1 - prox_z
+at_s2 = not na(s2) and low <= s2 + prox_z and low >= s2 - prox_z
+at_s3 = not na(s3) and low <= s3 + prox_z and low >= s3 - prox_z
+at_s4 = not na(s4) and low <= s4 + prox_z and low >= s4 - prox_z
+at_s5 = not na(s5) and low <= s5 + prox_z and low >= s5 - prox_z
+at_val = not na(val_price) and low <= val_price + prox_z and low >= val_price - prox_z * 1.5
+at_poc_buy = not na(poc_price) and low <= poc_price + prox_z and low >= poc_price - prox_z and trend_dir >= 0
+
+// --- Proximidad a resistencias ---
+at_r1 = not na(r1) and high >= r1 - prox_z and high <= r1 + prox_z
+at_r2 = not na(r2) and high >= r2 - prox_z and high <= r2 + prox_z
+at_r3 = not na(r3) and high >= r3 - prox_z and high <= r3 + prox_z
+at_r4 = not na(r4) and high >= r4 - prox_z and high <= r4 + prox_z
+at_r5 = not na(r5) and high >= r5 - prox_z and high <= r5 + prox_z
+at_vah = not na(vah_price) and high >= vah_price - prox_z and high <= vah_price + prox_z * 1.5
+at_poc_sell = not na(poc_price) and high >= poc_price - prox_z and high <= poc_price + prox_z and trend_dir <= 0
+
+// --- Confluencia total ---
+on_support  = at_s1 or at_s2 or at_s3 or at_s4 or at_s5 or at_val or at_poc_buy
+on_resist   = at_r1 or at_r2 or at_r3 or at_r4 or at_r5 or at_vah or at_poc_sell
+
+// --- Señal final: CONFLUENCIA OBLIGATORIA en los 3 filtros ---
+buy_signal  = on_support and bull_pat and vol_conf and close > open
+sell_signal = on_resist  and bear_pat and vol_conf and close < open
+
+// --- Marcadores en el gráfico ---
+plotshape(buy_signal,  title="▲ COMPRA", style=shape.triangleup,   location=location.belowbar, color=color.new(#00E676, 0), size=size.normal)
+plotshape(sell_signal, title="▼ VENTA",  style=shape.triangledown, location=location.abovebar, color=color.new(#FF1744, 0), size=size.normal)
+
+// --- Labels con precio exacto de entrada ---
+if buy_signal
+    lev = at_s1 ? "S1" : at_s2 ? "S2" : at_s3 ? "S3" : at_val ? "VAL" : "POC"
+    pat = bull_eng ? "Engulfing" : hammer ? "Hammer" : pin_bull ? "Pin Bar" : "Impulso"
+    label.new(bar_index, low - prox_z * 0.8,
+     text = "▲ COMPRA\n" + str.tostring(math.round(close, 2)) + "\n" + lev + " · " + pat,
+     color      = color.new(#00C853, 15),
+     textcolor  = color.white,
+     style      = label.style_label_up,
+     size       = size.small)
+
+if sell_signal
+    lev = at_r1 ? "R1" : at_r2 ? "R2" : at_r3 ? "R3" : at_vah ? "VAH" : "POC"
+    pat = bear_eng ? "Engulfing" : shoot_str ? "Shooting Star" : pin_bear ? "Pin Bar" : "Impulso"
+    label.new(bar_index, high + prox_z * 0.8,
+     text = "▼ VENTA\n" + str.tostring(math.round(close, 2)) + "\n" + lev + " · " + pat,
+     color      = color.new(#FF1744, 15),
+     textcolor  = color.white,
+     style      = label.style_label_down,
+     size       = size.small)
+
+// ============================================================
+// ALERTAS
+// ============================================================
+
+alertcondition(buy_signal,  title="▲ Señal COMPRA", message="ZRV ▲ COMPRA — {{ticker}} precio: {{close}}")
+alertcondition(sell_signal, title="▼ Señal VENTA",  message="ZRV ▼ VENTA  — {{ticker}} precio: {{close}}")
+alertcondition(not na(ph), title="Nueva Resistencia", message="ZRV - RESISTENCIA en {{ticker}} precio: {{high}}")
+alertcondition(not na(pl), title="Nuevo Soporte",     message="ZRV - SOPORTE en {{ticker}} precio: {{low}}")
+alertcondition(not na(poc_price) and math.abs(close - poc_price) / close * 100 < 0.3, title="Precio cerca del POC", message="ZRV - Precio cerca del POC en {{ticker}}")

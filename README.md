@@ -12,7 +12,6 @@ Indicador técnico avanzado para TradingView desarrollado en Pine Script v5.
 ## Tecnologías
 - Pine Script v5
 - TradingView
-- Desarrollado en colaboración con IA (Claude, ChatGPT)
 
 ## Cómo instalarlo
 1. Abrí TradingView
